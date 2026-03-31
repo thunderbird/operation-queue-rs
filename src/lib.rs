@@ -1,0 +1,76 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+//! This crate contains the queueing logic for asynchronous operations.
+//!
+//! It also contains helpers for synchronizing operations such as error handling
+//! across futures, in the [`line_token`] module.
+//!
+//! # The operation queue
+//!
+//! The queueing of operations is handled by the [`OperationQueue`] struct. It
+//! runs a given number of parallel runners, to which it dispatches operations
+//! on a "first come, first served" basis.
+//!
+//! An operation is a data structure that implements the [`QueuedOperation`]
+//! trait, and is started by the queue calling its `perform` method. Because
+//! this method is asynchronous, thus breaking dyn compatibility, another trait
+//! that is dyn-compatible ([`ErasedQueuedOperation`]) is used by the queue.
+//! However, `ErasedQueuedOperation` is implemented by any type that implements
+//! `QueuedOperation`, so consumers usually don't need to bother with it.
+//!
+//! [`OperationQueue`] is runtime-agnostic, meaning it is not designed to work
+//! only with a specific asynchronous runtime. However, it still needs to spawn
+//! a task for each of its runners. This is why [`OperationQueue::new`] takes a
+//! function as its sole argument, which is given the future for a runner's
+//! loop. For example, creating a new queue with the `tokio` crate could look
+//! like this:
+//!
+//! ```
+//! let queue = OperationQueue::new(|fut| {
+//!     let _ = tokio::task::spawn(fut);
+//! });
+//! ```
+//!
+//! The queue is started by [`OperationQueue::start`], and stopped by
+//! [`OperationQueue::stop`]. When starting the queue, the number of runners
+//! provided as the function's argument are created and started. A runner is a
+//! small stateful `struct` with an infinite asynchronous loop. Upon stopping,
+//! the queue terminates and clears all current runners. Note that, once
+//! stopped, a queue cannot be started again.
+//!
+//! Queuing operations is done with [`OperationQueue::enqueue`]. The operation
+//! is pushed to the back of the queue, and will be performed whenenever the
+//! previous operations have also been performed and a runner becomes available.
+//!
+//! ## Internal design considerations
+//!
+//! A previous approach involved using a [`VecDeque`] as the queue's inner
+//! buffer, but relying on [`async_channel`] allows simplifying the queue's
+//! structure, as well as the logic for waiting for new items to become
+//! available.
+//!
+//! [`Arc`] is used in a few places to ensure memory is correctly managed. For
+//! compatibility with current Thunderbird code, the queue's item type does not
+//! include a bound on [`Send`] and/or [`Sync`], so [`Rc`] could be used
+//! instead. However, we plan to, at a later time, address the current thread
+//! safety issues within the Thunderbird code base which currently prevent
+//! dispatching runners across multiple threads. In this context, we believe
+//! using `Arc` right away will avoid a hefty change in the future (at a
+//! negligible performance cost).
+//!
+//! [Rust's rules on dyn compatibility]:
+//!     <https://doc.rust-lang.org/reference/items/traits.html#dyn-compatibility>
+//! [`VecDeque`]: std::collections::VecDeque
+//! [`Rc`]: std::rc::Rc
+//! [`Arc`]: std::sync::Arc
+
+#[cfg(feature = "line_token")]
+pub mod line_token;
+
+// The queue is the main feature from this crate, so expose it at the top-level.
+mod error;
+mod operation_queue;
+pub use error::*;
+pub use operation_queue::*;
