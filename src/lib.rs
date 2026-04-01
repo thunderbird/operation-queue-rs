@@ -15,10 +15,11 @@
 //!
 //! An operation is a data structure that implements the [`QueuedOperation`]
 //! trait, and is started by the queue calling its `perform` method. Because
-//! this method is asynchronous, thus breaking dyn compatibility, another trait
-//! that is dyn-compatible ([`ErasedQueuedOperation`]) is used by the queue.
-//! However, `ErasedQueuedOperation` is implemented by any type that implements
-//! `QueuedOperation`, so consumers usually don't need to bother with it.
+//! this method is asynchronous, thus breaking [dyn compatibility], another
+//! trait that is dyn-compatible ([`ErasedQueuedOperation`]) is used by the
+//! queue. However, `ErasedQueuedOperation` is implemented by any type that
+//! implements `QueuedOperation`, so consumers usually don't need to bother with
+//! it.
 //!
 //! [`OperationQueue`] is runtime-agnostic, meaning it is not designed to work
 //! only with a specific asynchronous runtime. However, it still needs to spawn
@@ -44,27 +45,8 @@
 //! is pushed to the back of the queue, and will be performed whenenever the
 //! previous operations have also been performed and a runner becomes available.
 //!
-//! ## Internal design considerations
-//!
-//! A previous approach involved using a [`VecDeque`] as the queue's inner
-//! buffer, but relying on [`async_channel`] allows simplifying the queue's
-//! structure, as well as the logic for waiting for new items to become
-//! available.
-//!
-//! [`Arc`] is used in a few places to ensure memory is correctly managed. For
-//! compatibility with current Thunderbird code, the queue's item type does not
-//! include a bound on [`Send`] and/or [`Sync`], so [`Rc`] could be used
-//! instead. However, we plan to, at a later time, address the current thread
-//! safety issues within the Thunderbird code base which currently prevent
-//! dispatching runners across multiple threads. In this context, we believe
-//! using `Arc` right away will avoid a hefty change in the future (at a
-//! negligible performance cost).
-//!
-//! [Rust's rules on dyn compatibility]:
+//! [dyn compatibility]:
 //!     <https://doc.rust-lang.org/reference/items/traits.html#dyn-compatibility>
-//! [`VecDeque`]: std::collections::VecDeque
-//! [`Rc`]: std::rc::Rc
-//! [`Arc`]: std::sync::Arc
 
 #[cfg(feature = "line_token")]
 pub mod line_token;

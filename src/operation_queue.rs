@@ -52,6 +52,22 @@ where
 }
 
 /// A queue that performs asynchronous operations in order.
+//
+// Design considerations:
+//
+//  * A previous approach involved using a `VecDeque` as the queue's inner
+//    buffer, but relying on `async_channel` allows simplifying the queue's
+//    structure, as well as the logic for waiting for new items to become
+//    available.
+//
+//  * `Arc` is used to keep track of runners in a way that ensures memory is
+//    properly managed. For compatibility with current Thunderbird code, the
+//    queue's item type (`ErasedQueuedOperation`) does not include a bound on
+//    `Send` and/or `Sync`, so `Rc` could be used instead. However, we plan to,
+//    at a later time, address the current thread safety issues within the
+//    Thunderbird code base which currently prevent dispatching runners across
+//    multiple threads. In this context, we believe using `Arc` right away will
+//    avoid a hefty change in the future (at a negligible performance cost).
 pub struct OperationQueue {
     channel_sender: Sender<Box<dyn ErasedQueuedOperation>>,
     channel_receiver: Receiver<Box<dyn ErasedQueuedOperation>>,
@@ -64,23 +80,15 @@ impl OperationQueue {
     ///
     /// The function provided as argument is used when spawning new runners,
     /// e.g. `tokio::task::spawn`. It must not be blocking.
-    ///
-    /// Since most methods require the queue to be wrapped inside an [`Arc`],
-    /// this is how this method returns the new queue.
-    // See the design consideration section from the top of this file regarding
-    // the use of `Arc`.
-    #[allow(clippy::arc_with_non_send_sync)]
-    pub fn new(spawn_task: fn(fut: Box<dyn Future<Output = ()>>)) -> Arc<OperationQueue> {
+    pub fn new(spawn_task: fn(fut: Box<dyn Future<Output = ()>>)) -> OperationQueue {
         let (snd, rcv) = async_channel::unbounded();
 
-        let queue = OperationQueue {
+        OperationQueue {
             channel_sender: snd,
             channel_receiver: rcv,
             runners: RefCell::new(Vec::new()),
             spawn_task,
-        };
-
-        Arc::new(queue)
+        }
     }
 
     /// Starts the given number of runners that consume new items pushed to the
@@ -225,8 +233,12 @@ impl Runner {
     /// Creates a new [`Runner`], wrapped into an [`Arc`].
     ///
     /// `id` is a numerical identifier used for debugging.
-    // See the design consideration section from the top of this file regarding
-    // the use of `Arc`.
+    ///
+    /// Since [`Runner::run`] requires the queue to be wrapped inside an
+    /// [`Arc`], this is how this method returns the new queue.
+    //
+    // See the design consideration comment for `OperationQueue` regarding the
+    // use of `Arc`.
     #[allow(clippy::arc_with_non_send_sync)]
     fn new(id: u32, receiver: Receiver<Box<dyn ErasedQueuedOperation>>) -> Arc<Runner> {
         Arc::new(Runner {
