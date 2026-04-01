@@ -306,7 +306,7 @@ mod tests {
 
     fn new_queue() -> OperationQueue {
         OperationQueue::new(|fut| {
-            let _ = tokio::task::spawn_local(fut);
+            _ = tokio::task::spawn_local(fut);
         })
     }
 
@@ -340,7 +340,7 @@ mod tests {
 
         match queue.start(1) {
             Ok(_) => panic!("we should not be able to start the queue after stopping it"),
-            Err(err) if matches!(err, Error::Stopped) => (),
+            Err(Error::Stopped) => (),
             Err(_) => panic!("unexpected error"),
         }
 
@@ -354,7 +354,7 @@ mod tests {
         let op = Box::new(Operation {});
         match queue.enqueue(op).await {
             Ok(_) => panic!("we should not be able to enqueue operations after stopping the queue"),
-            Err(err) if matches!(err, Error::Sender) => (),
+            Err(Error::Sender) => (),
             Err(_) => panic!("unexpected error"),
         }
     }
