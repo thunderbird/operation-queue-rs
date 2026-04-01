@@ -13,9 +13,7 @@ pub enum Error {
     #[error("the queue has been stopped and cannot be started again")]
     Stopped,
 
-    #[error(
-        "async communication error: could not send operation to queue: sending into a closed channel"
-    )]
+    #[error("could not send operation to queue: sending into a closed channel")]
     Sender,
 }
 

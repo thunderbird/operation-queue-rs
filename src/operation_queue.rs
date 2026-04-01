@@ -113,6 +113,10 @@ impl OperationQueue {
 
     /// Pushes an operation to the back of the queue.
     ///
+    /// This function can be used with any type that implements
+    /// [`QueuedOperation`], since [`ErasedQueuedOperation`] is automatically
+    /// implemented for all such implementations.
+    ///
     /// An error can be returned if the queue has been stopped.
     pub async fn enqueue(&self, op: Box<dyn ErasedQueuedOperation>) -> Result<(), Error> {
         self.channel_sender.send(op).await?;
@@ -122,8 +126,9 @@ impl OperationQueue {
     /// Stops the queue.
     ///
     /// Operations that have already been queued up will still be performed, but
-    /// any call to [`enqueue`] following a call to `stop` will fail.
+    /// any call to [`start`] or [`enqueue`] following a call to `stop` will fail.
     ///
+    /// [`start`]: OperationQueue::start
     /// [`enqueue`]: OperationQueue::enqueue
     pub async fn stop(&self) {
         if !self.channel_sender.close() {
