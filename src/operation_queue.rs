@@ -72,15 +72,15 @@ pub struct OperationQueue {
     channel_sender: Sender<Box<dyn ErasedQueuedOperation>>,
     channel_receiver: Receiver<Box<dyn ErasedQueuedOperation>>,
     runners: RefCell<Vec<Arc<Runner>>>,
-    spawn_task: fn(fut: Box<dyn Future<Output = ()>>),
+    spawn_task: fn(fut: Pin<Box<dyn Future<Output = ()>>>),
 }
 
 impl OperationQueue {
     /// Creates a new operation queue.
     ///
     /// The function provided as argument is used when spawning new runners,
-    /// e.g. `tokio::task::spawn`. It must not be blocking.
-    pub fn new(spawn_task: fn(fut: Box<dyn Future<Output = ()>>)) -> OperationQueue {
+    /// e.g. `tokio::task::spawn_local`. It must not be blocking.
+    pub fn new(spawn_task: fn(fut: Pin<Box<dyn Future<Output = ()>>>)) -> OperationQueue {
         let (snd, rcv) = async_channel::unbounded();
 
         OperationQueue {
@@ -104,7 +104,7 @@ impl OperationQueue {
 
         for i in 0..runners {
             let runner = Runner::new(i, self.channel_receiver.clone());
-            (self.spawn_task)(Box::new(runner.clone().run()));
+            (self.spawn_task)(Box::pin(runner.clone().run()));
             self.runners.borrow_mut().push(runner);
         }
 
@@ -288,5 +288,129 @@ impl Runner {
     /// Gets the runner's current state.
     fn state(&self) -> RunnerState {
         self.state.get()
+    }
+}
+
+#[cfg(test)]
+// For simplicity, we run our async tests using tokio's local runtime using the
+// unstable "local" value for the `flavor` argument in `tokio::test`. Because it
+// comes from tokio's unstable API, we need to supply the `tokio_unstable` cfg
+// condition, which in turn triggers a warning from within the `tokio::test`
+// macro about an unexpected cfg condition name.
+#[allow(unexpected_cfgs)]
+mod tests {
+    use super::*;
+
+    use async_channel::Sender;
+    use tokio::time::Duration;
+
+    fn new_queue() -> OperationQueue {
+        OperationQueue::new(|fut| {
+            let _ = tokio::task::spawn_local(fut);
+        })
+    }
+
+    #[tokio::test(flavor = "local")]
+    async fn start_queue() {
+        let queue = new_queue();
+
+        queue.start(5).unwrap();
+        assert_eq!(queue.runners.borrow().len(), 5);
+
+        // We need to await something to give the runners a chance to start
+        // their loops.
+        tokio::time::sleep(Duration::from_millis(0)).await;
+        assert!(queue.idle());
+    }
+
+    #[tokio::test(flavor = "local")]
+    async fn stop_queue() {
+        let queue = new_queue();
+
+        queue.start(5).unwrap();
+
+        // We need to await something to give the runners a chance to start
+        // their loops.
+        tokio::time::sleep(Duration::from_millis(0)).await;
+        assert!(queue.idle());
+
+        queue.stop().await;
+        assert!(!queue.running());
+        assert!(queue.channel_receiver.is_closed());
+
+        match queue.start(1) {
+            Ok(_) => panic!("we should not be able to start the queue after stopping it"),
+            Err(err) if matches!(err, Error::Stopped) => (),
+            Err(_) => panic!("unexpected error"),
+        }
+
+        // Try to enqueue a dummy operation to make sure it fails.
+        #[derive(Debug)]
+        struct Operation {}
+        impl QueuedOperation for Operation {
+            async fn perform(&self) {}
+        }
+
+        let op = Box::new(Operation {});
+        match queue.enqueue(op).await {
+            Ok(_) => panic!("we should not be able to enqueue operations after stopping the queue"),
+            Err(err) if matches!(err, Error::Sender) => (),
+            Err(_) => panic!("unexpected error"),
+        }
+    }
+
+    #[tokio::test(flavor = "local")]
+    async fn operation_order() {
+        // A simple operation with a numerical ID that sends its own ID through
+        // a channel.
+        #[derive(Debug)]
+        struct Operation {
+            id: u8,
+            sender: Sender<u8>,
+        }
+        impl QueuedOperation for Operation {
+            async fn perform(&self) {
+                self.sender.send(self.id).await.unwrap();
+            }
+        }
+
+        let queue = new_queue();
+
+        // Create a channel the operations can use to send us their ID.
+        let (sender, receiver) = async_channel::unbounded();
+
+        // Enqueue a couple of operations.
+        queue
+            .enqueue(Box::new(Operation {
+                id: 1,
+                sender: sender.clone(),
+            }))
+            .await
+            .unwrap();
+
+        queue
+            .enqueue(Box::new(Operation {
+                id: 2,
+                sender: sender.clone(),
+            }))
+            .await
+            .unwrap();
+
+        // Start exactly one runner so we can check that operations run in
+        // order.
+        queue.start(1).unwrap();
+
+        // We need to await something to give the runner a chance to start and
+        // perform operations.
+        tokio::time::sleep(Duration::from_millis(0)).await;
+
+        // Check that we got both IDs in order.
+        let id = receiver.recv().await.unwrap();
+        assert_eq!(id, 1);
+        let id = receiver.recv().await.unwrap();
+        assert_eq!(id, 2);
+
+        // For bonus points: the queue should be fully idle now.
+        assert!(queue.idle());
     }
 }
