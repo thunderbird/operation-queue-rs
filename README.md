@@ -127,3 +127,13 @@ impl Request {
     }
 }
 ```
+
+# Running tests
+
+Some tests in this crate rely on tokio's [unstable
+API](https://docs.rs/tokio/latest/tokio/index.html#unstable-features).
+Therefore, running them requires the `--cfg tokio_unstable` compiler flag:
+
+```shell
+$ RUSTFLAGS="--cfg tokio_unstable" cargo test --all-features
+```
