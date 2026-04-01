@@ -65,6 +65,7 @@ struct ReleaseChannel {
 pub struct Line {
     // TODO: We should look into replacing this `RefCell` with a `Mutex` from
     // `async_lock` to make `Line` thread-safe.
+    // https://github.com/thunderbird/operation-queue-rs/issues/2
     channel: RefCell<Option<ReleaseChannel>>,
 }
 
