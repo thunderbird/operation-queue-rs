@@ -29,8 +29,9 @@
 //! like this:
 //!
 //! ```
+//! # use operation_queue::OperationQueue;
 //! let queue = OperationQueue::new(|fut| {
-//!     let _ = tokio::task::spawn(fut);
+//!     let _ = tokio::task::spawn_local(fut);
 //! });
 //! ```
 //!
@@ -44,6 +45,13 @@
 //! Queuing operations is done with [`OperationQueue::enqueue`]. The operation
 //! is pushed to the back of the queue, and will be performed whenenever the
 //! previous operations have also been performed and a runner becomes available.
+//!
+//! # Multithreading
+//!
+//! In order to maintain compatibility with the current Thunderbird code-base,
+//! neither the operation queue's runner, nor the synchronization helpers in the
+//! [`line_token`] module, can be sent between threads. This is something we
+//! plan to address in the future.
 //!
 //! [dyn compatibility]:
 //!     <https://doc.rust-lang.org/reference/items/traits.html#dyn-compatibility>
