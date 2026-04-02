@@ -121,6 +121,7 @@ impl Line {
 }
 
 /// The outcome from trying to acquire a [`Token`] for a [`Line`].
+#[must_use = "if the token is unused the line will immediately release again"]
 pub enum AcquireOutcome<'ao> {
     /// The line could be acquired and returned a token to hold on to.
     ///
@@ -165,6 +166,7 @@ impl<'ao> AcquireOutcome<'ao> {
 ///
 /// The [`Line`] is automatically released when this token goes out of scope and
 /// is dropped.
+#[must_use = "if unused the line will immediately release again"]
 pub struct Token<'t> {
     line: &'t Line,
 }
