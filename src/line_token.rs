@@ -63,6 +63,9 @@ struct ReleaseChannel {
 /// A [`Line`] from which a [`Token`] can be acquired.
 #[derive(Default)]
 pub struct Line {
+    // TODO: We should look into replacing this `RefCell` with a `Mutex` from
+    // `async_lock` to make `Line` thread-safe.
+    // https://github.com/thunderbird/operation-queue-rs/issues/2
     channel: RefCell<Option<ReleaseChannel>>,
 }
 
@@ -169,5 +172,109 @@ pub struct Token<'t> {
 impl Drop for Token<'_> {
     fn drop(&mut self) {
         self.line.release();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tokio::time::Duration;
+
+    use super::*;
+
+    fn get_token(line: &Line) -> Token<'_> {
+        match line.try_acquire_token() {
+            AcquireOutcome::Success(token) => token,
+            AcquireOutcome::Failure(_) => panic!("expected a token from try_acquire_token()"),
+        }
+    }
+
+    #[test]
+    fn acquire_token() {
+        let line = Line::new();
+
+        let _token = get_token(&line);
+
+        match line.try_acquire_token() {
+            AcquireOutcome::Success(_) => {
+                panic!("should not be able to acquire the line while the token is in scope")
+            }
+            AcquireOutcome::Failure(_) => (),
+        }
+    }
+
+    #[test]
+    fn token_out_of_scope() {
+        let line = Line::new();
+
+        {
+            let _token = get_token(&line);
+
+            match line.try_acquire_token() {
+                AcquireOutcome::Success(_) => {
+                    panic!("should not be able to acquire the line while the token is in scope")
+                }
+                AcquireOutcome::Failure(_) => (),
+            }
+        }
+
+        match line.try_acquire_token() {
+            AcquireOutcome::Success(_) => (),
+            AcquireOutcome::Failure(_) => {
+                panic!("expected a token now that the previous token has been dropped")
+            }
+        }
+    }
+
+    #[test]
+    fn or_token() {
+        let line = Line::new();
+
+        let token = get_token(&line);
+
+        match line.try_acquire_token().or_token(Some(token)) {
+            AcquireOutcome::Success(_) => (),
+            AcquireOutcome::Failure(_) => panic!("we should have kept our token"),
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn line_release_on_drop() {
+        let line = Line::new();
+
+        // A mutable variable that will act as the test's success flag and will
+        // only be true if it succeeds.
+        let mut success = false;
+
+        // Acquire the line's token, sleep for a bit (10ms) and then drop it.
+        // The reason we sleep here is to give some time to `wait_for_line` to
+        // try (and fail) to acquire the line's token before we drop it.
+        async fn acquire_sleep_and_drop(line: &Line) {
+            let _token = get_token(&line);
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        // Try (and fail) to acquire the token, then wait for the line to become
+        // available again. This function sets the success flag.
+        async fn wait_for_line(line: &Line, success: &mut bool) {
+            let shared = match line.try_acquire_token() {
+                AcquireOutcome::Success(_) => {
+                    panic!("should not be able to acquire the line while the token is in scope")
+                }
+                AcquireOutcome::Failure(shared) => shared,
+            };
+
+            shared.await.unwrap();
+            *success = true;
+        }
+
+        // Run both futures in parallel. `biased;` ensures the futures are
+        // polled in order (meaning `acquire_sleep_and_drop` is run first).
+        tokio::join! {
+            biased;
+            acquire_sleep_and_drop(&line),
+            wait_for_line(&line, &mut success),
+        };
+
+        assert!(success)
     }
 }
