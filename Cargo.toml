@@ -10,6 +10,9 @@ readme = "README.md"
 license = "MPL-2.0"
 repository = "https://github.com/thunderbird/operation-queue-rs"
 
+[package.metadata.docs.rs]
+all-features = true
+
 [features]
 line_token = []
 
