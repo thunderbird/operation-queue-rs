@@ -9,6 +9,7 @@ keywords = ["operation", "queue", "async", "synchronization"]
 readme = "README.md"
 license = "MPL-2.0"
 repository = "https://github.com/thunderbird/operation-queue-rs"
+exclude = [".github", ".vscode"]
 
 [package.metadata.docs.rs]
 all-features = true
