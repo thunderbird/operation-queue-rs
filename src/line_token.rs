@@ -61,6 +61,24 @@ struct ReleaseChannel {
 }
 
 /// A [`Line`] from which a [`Token`] can be acquired.
+///
+/// # Thread safety
+///
+/// `Line` is currently **not** thread-safe (see
+/// [issue #2](https://github.com/thunderbird/operation-queue-rs/issues/2)).
+/// Once fixed, this example should compile and pass:
+///
+/// ```rust
+/// use std::sync::Arc;
+/// use operation_queue::line_token::Line;
+///
+/// let line = Arc::new(Line::new());
+/// let clone = Arc::clone(&line);
+///
+/// std::thread::spawn(move || {
+///     let _ = clone.try_acquire_token();
+/// }).join().unwrap();
+/// ```
 #[derive(Default)]
 pub struct Line {
     // TODO: We should look into replacing this `RefCell` with a `Mutex` from
