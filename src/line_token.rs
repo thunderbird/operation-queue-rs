@@ -63,20 +63,14 @@ struct ReleaseChannel {
 ///
 /// # Thread safety
 ///
-/// `Line` is currently **not** thread-safe (see
-/// [issue #2](https://github.com/thunderbird/operation-queue-rs/issues/2)).
-/// Once fixed, this example should compile and pass:
+/// `Line` is thread-safe and can be shared across threads via [`Arc`]:
 ///
 /// ```rust
 /// use std::sync::Arc;
 /// use operation_queue::line_token::Line;
 ///
-/// let line = Arc::new(Line::new());
-/// let clone = Arc::clone(&line);
-///
-/// std::thread::spawn(move || {
-///     let _ = clone.try_acquire_token();
-/// }).join().unwrap();
+/// fn assert_send_sync<T: Send + Sync>() {}
+/// assert_send_sync::<Line>();
 /// ```
 ///
 /// [`Arc`]: std::sync::Arc
