@@ -20,6 +20,7 @@ line_token = []
 futures = "0.3.28"
 oneshot = "0.1.11"
 async-channel = "2.5.0"
+async-lock = "3"
 log = "0.4.21"
 thiserror = "1.0.56"
 
