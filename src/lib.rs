@@ -48,10 +48,11 @@
 //!
 //! # Multithreading
 //!
-//! In order to maintain compatibility with the current Thunderbird code-base,
-//! neither the operation queue's runner, nor the synchronization helpers in the
-//! [`line_token`] module, can be sent between threads. This is something we
-//! plan to address in the future.
+//! The synchronization helpers in the [`line_token`] module are thread-safe.
+//!
+//! However, in order to maintain compatibility with the current Thunderbird
+//! code-base, the operation queue's runner cannot be sent between threads.
+//! This is something we plan to address in the future.
 //!
 //! [dyn compatibility]:
 //!     <https://doc.rust-lang.org/reference/items/traits.html#dyn-compatibility>
