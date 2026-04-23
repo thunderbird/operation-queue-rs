@@ -2,6 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+// Turn the nightly `doc_cfg` attribute on for docs.rs, so it mentions which
+// types/modules are gated behind specific features.
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 //! This crate contains the queueing logic for asynchronous operations.
 //!
 //! It also contains helpers for synchronizing operations such as error handling
