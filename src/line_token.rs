@@ -59,8 +59,13 @@ struct ReleaseChannel {
     receiver: Shared<Receiver<()>>,
 }
 
+/// The current status of a line.
 pub enum LineStatus {
+    /// The line is free.
     Free,
+
+    /// The line is busy, and the nested future can be used to wait till the
+    /// line becomes free again.
     Busy(Shared<Receiver<()>>),
 }
 
