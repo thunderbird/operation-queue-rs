@@ -59,6 +59,11 @@ struct ReleaseChannel {
     receiver: Shared<Receiver<()>>,
 }
 
+pub enum LineStatus {
+    Free,
+    Busy(Shared<Receiver<()>>),
+}
+
 /// A [`Line`] from which a [`Token`] can be acquired.
 ///
 /// # Thread safety
@@ -84,6 +89,22 @@ impl Line {
     pub fn new() -> Line {
         Line {
             channel: Default::default(),
+        }
+    }
+
+    /// Retrieve the current status of the [`Line`], i.e. whether it's currently
+    /// free or not.
+    ///
+    /// Unlike [`try_acquire_token`], this method does not attempt to lock the
+    /// line if it's free, and does not generate a [`Token`]. If the line is
+    /// busy, it returns a future the consumer can use to wait till the line
+    /// becomes free again.
+    ///
+    /// [`try_acquire_token`]: Self::try_acquire_token
+    pub async fn status(&self) -> LineStatus {
+        match self.channel.lock().await.as_ref() {
+            Some(channel) => LineStatus::Busy(channel.receiver.clone()),
+            None => LineStatus::Free,
         }
     }
 
