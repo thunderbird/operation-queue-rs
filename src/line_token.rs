@@ -317,4 +317,52 @@ mod tests {
 
         assert!(success)
     }
+
+    /// Tests the [`Line::status`] method.
+    ///
+    /// This test behaves a lot like [`line_release_on_drop`], except it waits
+    /// for the line to be freed via [`Line::status`] rather than
+    /// [`Line::try_acquire_token`].
+    #[tokio::test(flavor = "current_thread")]
+    async fn line_status() {
+        let line = Line::new();
+        assert!(matches!(line.status().await, LineStatus::Free));
+
+        // A mutable variable that will act as the test's success flag and will
+        // only be true if it succeeds.
+        let mut success = false;
+
+        // Acquire the line's token, sleep for a bit (10ms) and then drop it.
+        // The reason we sleep here is to give some time to `wait_for_line` to
+        // try (and fail) to acquire the line's token before we drop it.
+        async fn acquire_sleep_and_drop(line: &Line) {
+            let _token = get_token(&line).await;
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        // Check that the line is busy, then wait for the line to become
+        // available again. This function sets the success flag.
+        async fn wait_for_line(line: &Line, success: &mut bool) {
+            let shared = match line.status().await {
+                LineStatus::Free => {
+                    panic!("line should be busy")
+                }
+                LineStatus::Busy(shared) => shared,
+            };
+
+            shared.await.unwrap();
+            *success = true;
+        }
+
+        // Run both futures in parallel. `biased;` ensures the futures are
+        // polled in order (meaning `acquire_sleep_and_drop` is run first).
+        tokio::join! {
+            biased;
+            acquire_sleep_and_drop(&line),
+            wait_for_line(&line, &mut success),
+        };
+
+        assert!(matches!(line.status().await, LineStatus::Free));
+        assert!(success)
+    }
 }
