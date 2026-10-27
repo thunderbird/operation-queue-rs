@@ -36,10 +36,90 @@ pub(crate) type SpawnTaskFn = fn(Pin<Box<dyn Future<Output = ()> + Send>>);
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        collections::HashSet,
+        sync::{Arc, Condvar, Mutex},
+        thread::{self, ThreadId},
+        time::Duration,
+    };
+
+    use async_channel::Sender;
+
+    use super::QueuedOperation;
+    use crate::OperationQueue;
+
     fn assert_send<T: Send>() {}
 
     #[test]
     fn operation_queue_is_send() {
         assert_send::<crate::OperationQueue>();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn operations_run_in_parallel_across_threads() {
+        const RUNNERS: usize = 4;
+        const TIMEOUT: Duration = Duration::from_secs(5);
+
+        #[derive(Debug)]
+        struct Operation {
+            arrivals: Arc<(Mutex<usize>, Condvar)>,
+            sender: Sender<(ThreadId, bool)>,
+        }
+        impl QueuedOperation for Operation {
+            async fn perform(&self) {
+                // Block this thread until every operation is running, so each
+                // one must be on its own thread. `block_in_place` lets the
+                // other runners carry on meanwhile.
+                let result = tokio::task::block_in_place(|| {
+                    let (count, all_arrived) = &*self.arrivals;
+                    let mut count = count.lock().unwrap();
+                    *count += 1;
+                    all_arrived.notify_all();
+                    let (count, _) = all_arrived
+                        .wait_timeout_while(count, TIMEOUT, |count| *count < RUNNERS)
+                        .unwrap();
+                    (thread::current().id(), *count == RUNNERS)
+                });
+
+                // This only fails if the test has already failed.
+                _ = self.sender.send(result).await;
+            }
+        }
+
+        let queue = OperationQueue::new(|fut| {
+            _ = tokio::spawn(fut);
+        });
+        queue.start(RUNNERS as u32).unwrap();
+
+        let arrivals = Arc::new((Mutex::new(0), Condvar::new()));
+        let (sender, receiver) = async_channel::unbounded();
+
+        for _ in 0..RUNNERS {
+            queue
+                .enqueue(Box::new(Operation {
+                    arrivals: arrivals.clone(),
+                    sender: sender.clone(),
+                }))
+                .await
+                .unwrap();
+        }
+
+        let mut threads = HashSet::new();
+        for _ in 0..RUNNERS {
+            let (thread_id, all_arrived) = tokio::time::timeout(TIMEOUT * 2, receiver.recv())
+                .await
+                .expect("timed out waiting for an operation to be performed")
+                .unwrap();
+            assert!(all_arrived, "operations did not all run at the same time");
+            threads.insert(thread_id);
+        }
+
+        assert_eq!(threads.len(), RUNNERS, "operations shared a thread");
+        assert!(
+            !threads.contains(&thread::current().id()),
+            "an operation ran on the test's thread"
+        );
+
+        queue.stop().await;
     }
 }
