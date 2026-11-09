@@ -19,14 +19,19 @@ use async_channel::{Receiver, Sender};
 
 use crate::error::Error;
 
-#[cfg(feature = "send")]
+#[cfg(docsrs)]
+#[doc(cfg(feature = "send"))]
+pub mod multi_thread;
+#[cfg(all(feature = "send", not(docsrs)))]
 mod multi_thread;
 #[cfg(feature = "send")]
 use multi_thread::SpawnTaskFn;
 #[cfg(feature = "send")]
 pub use multi_thread::{ErasedQueuedOperation, QueuedOperation};
 
-#[cfg(not(feature = "send"))]
+#[cfg(docsrs)]
+pub mod local_thread;
+#[cfg(all(not(feature = "send"), not(docsrs)))]
 mod local_thread;
 #[cfg(not(feature = "send"))]
 use local_thread::SpawnTaskFn;
@@ -64,6 +69,11 @@ impl OperationQueue {
     /// The function provided as argument is used when spawning new runners,
     /// e.g. `tokio::task::spawn_local` or `tokio::spawn`. It must not be
     /// blocking.
+    #[cfg_attr(
+        docsrs,
+        doc = "",
+        doc = "Its type is [`multi_thread::SpawnTaskFn`](crate::multi_thread::SpawnTaskFn) with the `send` feature, and [`local_thread::SpawnTaskFn`](crate::local_thread::SpawnTaskFn) without it."
+    )]
     pub fn new(spawn_task: SpawnTaskFn) -> OperationQueue {
         let (snd, rcv) = async_channel::unbounded();
 
@@ -102,6 +112,11 @@ impl OperationQueue {
     /// implemented for all such implementations.
     ///
     /// An error can be returned if the queue has been stopped.
+    #[cfg_attr(
+        docsrs,
+        doc = "",
+        doc = "Without the `send` feature, `op` implements [`local_thread::ErasedQueuedOperation`](crate::local_thread::ErasedQueuedOperation) instead."
+    )]
     pub async fn enqueue(&self, op: Box<dyn ErasedQueuedOperation>) -> Result<(), Error> {
         self.channel_sender.send(op).await?;
         Ok(())
