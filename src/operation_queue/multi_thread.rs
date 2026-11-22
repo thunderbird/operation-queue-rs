@@ -7,16 +7,24 @@
 
 use std::{fmt::Debug, future::Future, pin::Pin};
 
-/// An operation that can be added to an [`OperationQueue`](crate::OperationQueue).
-/// `Send`-safe counterpart to the non-`send`-feature `QueuedOperation`, for
-/// use with e.g. `tokio::spawn` on a multi-threaded runtime.
+/// An operation that can be added to an [`OperationQueue`](crate::OperationQueue),
+/// for use with e.g. `tokio::spawn` on a multi-threaded runtime.
+#[cfg_attr(
+    docsrs,
+    doc = "",
+    doc = "Without the `send` feature, this trait is replaced by [`local_thread::QueuedOperation`](crate::local_thread::QueuedOperation)."
+)]
 pub trait QueuedOperation: Debug + Send {
     fn perform(&self) -> impl Future<Output = ()> + Send;
 }
 
-/// A dyn-compatible version of [`QueuedOperation`], implemented for all types
-/// that implement it. See `local_thread::ErasedQueuedOperation` for why this
-/// is necessary.
+/// A dyn-compatible version of [`QueuedOperation`] that boxes the future
+/// returned by `perform`, implemented for all types that implement it.
+#[cfg_attr(
+    docsrs,
+    doc = "",
+    doc = "Without the `send` feature, this trait is replaced by [`local_thread::ErasedQueuedOperation`](crate::local_thread::ErasedQueuedOperation)."
+)]
 pub trait ErasedQueuedOperation: Debug + Send {
     fn perform<'op>(&'op self) -> Pin<Box<dyn Future<Output = ()> + Send + 'op>>;
 }
@@ -32,9 +40,9 @@ where
 
 /// The type used to spawn a runner's loop, e.g. `tokio::spawn`. Must not be
 /// blocking.
-pub(crate) type SpawnTaskFn = fn(Pin<Box<dyn Future<Output = ()> + Send>>);
+pub type SpawnTaskFn = fn(Pin<Box<dyn Future<Output = ()> + Send>>);
 
-#[cfg(test)]
+#[cfg(all(test, feature = "send"))]
 mod tests {
     use std::{
         collections::HashSet,

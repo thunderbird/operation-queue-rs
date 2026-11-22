@@ -43,4 +43,4 @@ where
 
 /// The type used to spawn a runner's loop, e.g. `tokio::task::spawn_local`.
 /// Must not be blocking.
-pub(crate) type SpawnTaskFn = fn(Pin<Box<dyn Future<Output = ()>>>);
+pub type SpawnTaskFn = fn(Pin<Box<dyn Future<Output = ()>>>);

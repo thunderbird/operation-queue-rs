@@ -5,6 +5,7 @@
 // Turn the nightly `doc_cfg` attribute on for docs.rs, so it mentions which
 // types/modules are gated behind specific features.
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(docsrs, doc(auto_cfg(hide(docsrs))))]
 
 //! This crate contains the queueing logic for asynchronous operations.
 //!
@@ -62,6 +63,11 @@
 //!
 //! [dyn compatibility]:
 //!     <https://doc.rust-lang.org/reference/items/traits.html#dyn-compatibility>
+#![cfg_attr(
+    docsrs,
+    doc = "",
+    doc = "Both variants of the operation traits are documented in the [`local_thread`] and [`multi_thread`] modules."
+)]
 
 #[cfg(feature = "line_token")]
 pub mod line_token;
